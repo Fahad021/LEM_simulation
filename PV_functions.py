@@ -47,7 +47,10 @@ def calc_bids_PV(dt_sim_time,df_PV_state,retail):
                   df_PV_forecast['# timestamp'] = pandas.to_datetime(df_PV_forecast['# timestamp'])
                   df_PV_forecast.set_index('# timestamp',inplace=True)
                   df_PV_forecast = df_PV_forecast[df_PV_state.PV_name]
-                  max_PV_forecast = df_PV_forecast.loc[(df_baseload.index >= dt_sim_time) & (df_baseload.index < dt_sim_time + pandas.Timedelta(str(int(interval/60))+' min'))].max()
+                  max_PV_forecast = df_PV_forecast.loc[
+                      (df_baseload.index >= dt_sim_time)
+                      & (df_baseload.index < dt_sim_time +
+                         pandas.Timedelta(f'{int(interval / 60)} min'))].max()
             except:
                   df_PV_state['q_sell'] = df_PV_state['P_Out'] #If only perfect load forecast available but not PV data
       return df_PV_state

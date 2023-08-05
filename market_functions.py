@@ -30,9 +30,14 @@ def create_market(df_WS,df_prices,p_max,prec,price_intervals,dt_sim_time):
     retail.Pmin = 0.0
     retail.Pmax = p_max
     retail.Pprec = prec
-    
+
     #historical prices
-    if ref_price == 'historical':
+    if ref_price == 'forward':
+        minutes = int(price_intervals*interval/60)
+        mean_p = df_WS['DA'].loc[dt_sim_time:dt_sim_time+datetime.timedelta(minutes=minutes)].mean()
+        var_p = df_WS['DA'].loc[dt_sim_time:dt_sim_time+datetime.timedelta(minutes=minutes)].var()
+        var_p = sqrt(var_p) #should actually by std
+    elif ref_price == 'historical':
         if len(df_prices) > 0:
             mean_p = df_prices['clearing_price'].iloc[-price_intervals:].mean() #last hour
             var_p = df_prices['clearing_price'].iloc[-price_intervals:].var()
@@ -40,18 +45,12 @@ def create_market(df_WS,df_prices,p_max,prec,price_intervals,dt_sim_time):
         else:
             mean_p = 50. #(retail.Pmax - retail.Pmin)/2
             var_p = 0.10
-    #forward prices
-    elif ref_price == 'forward':
-        minutes = int(price_intervals*interval/60)
-        mean_p = df_WS['DA'].loc[dt_sim_time:dt_sim_time+datetime.timedelta(minutes=minutes)].mean()
-        var_p = df_WS['DA'].loc[dt_sim_time:dt_sim_time+datetime.timedelta(minutes=minutes)].var()
-        var_p = sqrt(var_p) #should actually by std
-    #forward prices
     elif ref_price == 'none':
         mean_p = p_max*100. #willing to pay maximum price
         var_p = 0.
     else:
-        import sys; sys.exit('No such reference price')
+        import sys
+        sys.exit('No such reference price')
 
     return retail, mean_p, var_p
 
@@ -63,9 +62,31 @@ def include_unresp_load(dt_sim_time,retail,df_prices,df_buy_bids,df_awarded_bids
     if len(df_prices) == 0:
         active_prev = inel_prev = unresp_load = 0.0
     else:
-        prev_loc_supply = df_awarded_bids['bid_quantity'].loc[(df_awarded_bids['timestamp'] == (pandas.Timestamp(dt_sim_time) - pandas.Timedelta(str(int(interval/60))+' min'))) & (df_awarded_bids['S_D'] == 'S')].sum()
-        prev_loc_demand = df_awarded_bids['bid_quantity'].loc[(df_awarded_bids['timestamp'] == (pandas.Timestamp(dt_sim_time) - pandas.Timedelta(str(int(interval/60))+' min'))) & (df_awarded_bids['S_D'] == 'D')].sum()
-        
+        prev_loc_supply = (
+            df_awarded_bids['bid_quantity']
+            .loc[
+                (
+                    df_awarded_bids['timestamp']
+                    == pandas.Timestamp(dt_sim_time)
+                    - pandas.Timedelta(f'{int(interval / 60)} min')
+                )
+                & (df_awarded_bids['S_D'] == 'S')
+            ]
+            .sum()
+        )
+        prev_loc_demand = (
+            df_awarded_bids['bid_quantity']
+            .loc[
+                (
+                    df_awarded_bids['timestamp']
+                    == pandas.Timestamp(dt_sim_time)
+                    - pandas.Timedelta(f'{int(interval / 60)} min')
+                )
+                & (df_awarded_bids['S_D'] == 'D')
+            ]
+            .sum()
+        )
+
         #For baseload calculation
         #unresp_load = 0
 
@@ -75,13 +96,11 @@ def include_unresp_load(dt_sim_time,retail,df_prices,df_buy_bids,df_awarded_bids
             active_prev = df_prices['clearing_quantity'].loc[dt_sim_time - dt]
             inel_prev = df_prices['unresponsive_loads'].loc[dt_sim_time - dt]
             unresp_load = (load_SLACK - max(active_prev - inel_prev,0)) * unresp_factor
-            
+
             #Myopic based on awarded bids
             #Works only if no WS market bids or unresp load in df_awarded!
             unresp_load = (load_SLACK - prev_loc_demand + prev_loc_supply)*unresp_factor
             #import pdb; pdb.set_trace()
-        #Perfect max forecast
-        #elif load_forecast == 'perfect':
         else:
             df_baseload = pandas.read_csv('glm_generation_'+city+'/'+load_forecast)
             df_baseload['# timestamp'] = df_baseload['# timestamp'].str.replace(r' UTC$', '')
@@ -93,20 +112,20 @@ def include_unresp_load(dt_sim_time,retail,df_prices,df_buy_bids,df_awarded_bids
             unresp_load_t1 = load_SLACK - prev_loc_demand + prev_loc_supply # unresponsive load (base + GAS) at t-1
             gas_t1 = unresp_load_t1 - baseload_t1
             if gas_t1 < 0.0:
-                print('Gas load is negative: '+str(gas_t1))
+                print(f'Gas load is negative: {str(gas_t1)}')
 
             unresp_load = (baseload_t + gas_t1)*unresp_factor
-            # last_baseload = df_baseload['baseload'].loc[dt_sim_time - pandas.Timedelta('1 min')]
-            # max_baseload = df_baseload['baseload'].loc[(df_baseload.index >= dt_sim_time) & (df_baseload.index < dt_sim_time + pandas.Timedelta(str(int(interval/60))+' min'))].max()
-            # unresp_load = load_SLACK - prev_loc_demand + prev_loc_supply - last_baseload + max_baseload
-            # if unresp_factor > 1.0:
-            #     import pdb; pdb.set_trace()
-            #     import sys
-            #     sys.exit('Add noise through unresp_factor')
-        #else:
-        #    import sys; sys.exit('No such load forecast')
+                    # last_baseload = df_baseload['baseload'].loc[dt_sim_time - pandas.Timedelta('1 min')]
+                    # max_baseload = df_baseload['baseload'].loc[(df_baseload.index >= dt_sim_time) & (df_baseload.index < dt_sim_time + pandas.Timedelta(str(int(interval/60))+' min'))].max()
+                    # unresp_load = load_SLACK - prev_loc_demand + prev_loc_supply - last_baseload + max_baseload
+                    # if unresp_factor > 1.0:
+                    #     import pdb; pdb.set_trace()
+                    #     import sys
+                    #     sys.exit('Add noise through unresp_factor')
+            #else:
+            #    import sys; sys.exit('No such load forecast')
 
-        #print('Unresp load: '+str(unresp_load))
+            #print('Unresp load: '+str(unresp_load))
     retail.buy(unresp_load,appliance_name='unresp')
     #df_buy_bids = df_buy_bids.append(pandas.DataFrame(columns=df_buy_bids.columns,data=[[dt_sim_time,'unresponsive_loads',p_max,round(float(unresp_load),prec),'None']]),ignore_index=True)
     df_buy_bids = df_buy_bids.append(pandas.DataFrame(columns=df_buy_bids.columns,data=[[dt_sim_time,'unresponsive_loads',p_max,round(float(unresp_load),prec)]]),ignore_index=True)
@@ -115,7 +134,7 @@ def include_unresp_load(dt_sim_time,retail,df_prices,df_buy_bids,df_awarded_bids
 
 def include_unresp_load_control(dt_sim_time,retail,df_prices,df_buy_bids,df_awarded_bids):
     load_SLACK = 0.0 #measured_real_power in [W]
-    print('Slack '+str(load_SLACK))
+    print(f'Slack {load_SLACK}')
     #Alternatively: All loads which have been bidding and active in prev period
     dt = datetime.timedelta(seconds=interval)
     if len(df_prices) == 0:
@@ -237,7 +256,7 @@ class Market :
     # dP = P supply - P demand constraint (default is 0)
     #
     # Returns market status
-    def clear(self,dQ=0.0,dP=0.0,df_time=None) :
+    def clear(self,dQ=0.0,dP=0.0,df_time=None):
 
 #        #Sets P_max if none is given
 #        if self.Pmax is None:
@@ -248,10 +267,10 @@ class Market :
 #                self.Pmax = 100.0
 #            else:
 #                self.Pmax = P_all.max()
-        if 0 > self.Pmax :
+        if self.Pmax < 0:
             self.status = 2
             raise ValueError('Pmax has not been set or is negative')
-            
+
         if self.Pmin >= self.Pmax :
             self.status = 2
             raise ValueError('market Pmin is not less than Pmax')
@@ -269,7 +288,7 @@ class Market :
         self.Ps = round(P,self.Pprec)
         return self.status, df_time
 
-    def clear_trivial(self,dQ,dP,df_time) :
+    def clear_trivial(self,dQ,dP,df_time):
         """
         returns the Quantity, Price clearing point of a market with all response levels at 0.
         """
@@ -277,10 +296,9 @@ class Market :
         #print "The length of D", len(self.D)
         #print "The length of S", len(self.S)
         isSZero = isDZero = False
-        #If return without setting status, data is "stale" is that what it should do?
-        if len(self.S) == 0 and len(self.D) == 0 :
-            return 0, 0
-        if len(self.S) == 0 :
+        if len(self.S) == 0:
+            if len(self.D) == 0:
+                return 0, 0
             #print "isSZero set"
             isSZero = True
         if len(self.D) == 0 :
@@ -288,7 +306,7 @@ class Market :
             isDZero = True
 
         t0 = time.time()
-        if isSZero is False:
+        if not isSZero:
             St = array([[0.0,0.0,0.0,None]]+self.S) #temporarily insert line to keep types of elements
             St = St[1:,:]
             S = St[argsort(St.T[0],0)]
@@ -307,7 +325,7 @@ class Market :
             self.Sp = Sp
 
         # sort the demand bids
-        if isDZero is False :
+        if not isDZero:
             #Dt = array(self.D)
             Dt = array([[0.0,0.0,0.0,None]]+self.D) #temporarily insert line to keep types of elements
             Dt = Dt[1:,:]
@@ -333,31 +351,31 @@ class Market :
         j = 0 # seller index
         v = 0 # verify flag
         a = b = 0.0
-        if isDZero is False :
+        if not isDZero:
             a = D[0][0]
-        if isSZero is False :
+        if not isSZero:
             b = S[0][0]
         Q = 0.0
         nb = len(self.D)
         ns = len(self.S)
 
-        while ( i < nb ) and ( j < ns ) and ( D[i][0] >= S[j][0] ) : #loop until Price demand/supply is >= 1
-            if D[i][1] > S[j][1] : #Quantity Demanded > Quantity Selling
+        while ( i < nb ) and ( j < ns ) and ( D[i][0] >= S[j][0] ): #loop until Price demand/supply is >= 1
+            if D[i][1] > S[j][1]: #Quantity Demanded > Quantity Selling
                 Q = S[j][1]
                 a = b = D[i][0]
-                j = j+1
+                j += 1
                 v = 0
-            elif D[i][1] < S[j][1] : #Quantity Buying < Quantity Selling
+            elif D[i][1] < S[j][1]: #Quantity Buying < Quantity Selling
                 Q = D[i][1]
                 a = b = S[j][0]
-                i = i+1
+                i += 1
                 v = 0
-            else :
+            else:
                 Q = D[i][1]
                 a = D[i][0]
                 b = S[j][0]
-                i = i+1
-                j = j+1
+                i += 1
+                j += 1
                 v = 1 #set flag once the two Quantities equal
         t2 = time.time()
         self.D_awarded = self.D[1:max(i-1,0)+1,:] #First skipped because of axis interception
@@ -375,25 +393,26 @@ class Market :
             else :
                 v = 0
         #If there are no bids, the price is set equal to the supply price
-        if isDZero :
-            P = b
-        elif isSZero :
+        if not isDZero and not isSZero and self.surplusControl == 0:
+            P = (a+b)/2
+        elif (
+            not isDZero
+            and not isSZero
+            and self.surplusControl == 1
+            or not isDZero
+            and isSZero
+        ):
             P = a
-        else: #If there are bids, then the price is set equal to the average decided on above
-            if self.surplusControl == 0: #split the surplus
-                P = (a+b)/2
-            elif self.surplusControl == 1: #surplus goes to the customer
-                P = a
-            else:  #surplus goes to the producer
-                P = b
+        else:
+            P = b
 
-        if not df_time is None:
+        if df_time is not None:
             df_time.at[n,'sorting_time'] = t1-t0
             df_time.at[n,'clearing_time'] = t2-t1
         self.status = 0
         return Q,P,df_time
 
-    def clear_nontrivial(self,dQ,dP) :
+    def clear_nontrivial(self,dQ,dP):
         """
         returns the Quantity, Price clearing point of a market whose responses are not 0
         """
@@ -405,21 +424,9 @@ class Market :
         #print "self.S", self.S
         totalQd = 0
         totalQs = 0
-        S = [] #[ [self.Pmin, 0.0, 0.0], [self.Pmax, 0.0, 0.0] ]
-        #print 'S=',S
-        for s in self.S : #Copy over items in Supply list to local list
-            #print 's=',s
-            S.append(s)
-            # S = self.add_supply(S,s) #When the suppliers enter add supply the resposne curve is stripped
-            #print 'S=',S
+        S = list(self.S)
         S = sorted(S)
-        D = []#[ [self.Pmax, 0.0, 0.0], [self.Pmin, 0.0, 0.0] ]
-        #print 'D=',D
-        for d in self.D : #Copy over items in Demand list to local list
-            #print 'd=',d
-            D.append(d)
-            # D = self.add_demand(D,d)
-            #print 'D=',D
+        D = list(self.D)
         D = sorted(D)
         Q = 0.0
         P = 0.0
@@ -479,35 +486,25 @@ class Market :
         #print "Current is: {} ".format(current)
         price_start = new[0]
         price_end = self.find_pfinal(new)
-        quant_begin = 0
-        quant_end = new[1]
         if len(current) == 0: #if nothing's there, add the current value as default
             #print "It's THE FIRST sell"
             new_prange = [price_start, price_end]
+            quant_begin = 0
+            quant_end = new[1]
             new_qrange = [quant_begin, quant_end]
-            updated = [[new_prange, new_qrange]]
-            #print "{} {} {}".format("-"*15, updated, "-"*15)
-            return updated
+            return [[new_prange, new_qrange]]
         count = 0
-        if new[2] < 0:
-            for index, pair in enumerate(current): #Handles Buys
-                if price_end > pair[0][0]:
-                    count = index
-                elif price_end < pair[0][0]:
-                    break
-                else:
-                    count = index
-            #print "THIS WAS A SELL AND THE INDEX FINISHED AT:{} ".format(count)
-        else:
-            for index, pair in enumerate(current): #This loop handles the sells
-                if price_end > pair[0][1]:
-                    break
-                elif price_end < pair[0][1]:
+        for index, pair in enumerate(current):
+            if new[2] < 0:
+                if price_end > pair[0][0] or price_end >= pair[0][0]:
                     count = index
                 else:
-                    count = index
-            #print "THIS WAS A BUY AND THE INDEX FINISHED AT:{} ".format(count)
-
+                    break
+                    #print "THIS WAS A SELL AND THE INDEX FINISHED AT:{} ".format(count)
+            elif price_end > pair[0][1]:
+                break
+            else:
+                count = index
         #print "ABOUT TO CALL CHANGE_BELOW: CURRENT IS {} \n NEW is {}".format(current, new)
         updated = self.update_Normal(current, price_start, new)
         #Will update the array and filter here. Doing it within is too error prone
@@ -534,9 +531,9 @@ class Market :
         #print " {} Update_Normal {} ".format("__"*25, "__"*25)
         writeable = []
         flag = False
-        for i, tup in enumerate(current):
-            #print " {} Looping with index {} and tup {} {}".format("+"*25, i, tup, "+"*25)
-            q_min = 0
+        #print " {} Looping with index {} and tup {} {}".format("+"*25, i, tup, "+"*25)
+        q_min = 0
+        for tup in current:
             q_max = new[1]
             p_end = self.find_pfinal(new)
             p_begin = new[0]
@@ -557,12 +554,11 @@ class Market :
             if (int(tup[0][0] - tup[0][1]) == 0): #If zero size range, don't need calculations
                 #print "{}The tup is 0 in range, skipped{}".format("-"*15, "-"*15)
                 writeable.append(tup)
-                continue
             elif p_begin >= min(old_prange_1, old_prange_2) and p_begin < max(old_prange_1, old_prange_2): #line begins within
                 flag = False
+                #print "{}begins within, ends above{}".format("-"*15, "-"*15)
+                tup_lo = [old_prange_1, p_begin] #price range of anything below the line within current tup
                 if p_end > max(old_prange_1, old_prange_2): #ends above
-                    #print "{}begins within, ends above{}".format("-"*15, "-"*15)
-                    tup_lo = [old_prange_1, p_begin] #price range of anything below the line within current tup
                     #print "Just created tup_lo: {}".format(tup_lo)
                     #print "{}Calling update quantity from without the if statement{}".format("#"*15, "#"*15)
                     tup_lo = self.update_quantity(tup, tup_lo, None, 2) #include the quantity
@@ -578,11 +574,8 @@ class Market :
                     #print "{} Calling update on tup_hi {}".format(">>"*10, tup_hi)
                     tup_hi = self.update_quantity(tup, tup_hi, new, 1)
                     writeable.append(tup_hi)
-                    #print "tup_lo has just been added to writeable {}".format(writeable)
-                else : #ends within
-                    #print "{}begins within, ends within{}".format("-"*15, "-"*15)
-                    #print "tup[0][1] is {}".format(tup[0][1])
-                    tup_lo = [old_prange_1, p_begin] #price range of anything below the line
+                                #print "tup_lo has just been added to writeable {}".format(writeable)
+                else: #ends within
                     tup_lo = self.update_quantity(tup, tup_lo, None, 2)#Include Quantity
                     tup_mid = [p_begin, p_end] #price range of anything within the line
                     #print "Adding in the additional quantities of the line next"
@@ -590,8 +583,7 @@ class Market :
                     tup_mid = self.update_quantity(tup, tup_mid, new, 3)#Include Quantity
                     tup_hi = [p_end, old_prange_2] #price range of anything above the tuple (within the line)
                     tup_hi = self.update_quantity(tup, tup_hi, None, 1)
-                    writeable.append(tup_lo)
-                    writeable.append(tup_mid)
+                    writeable.extend((tup_lo, tup_mid))
                     if tup_hi[0][0] is not tup_mid[0][0]:
                         writeable.append(tup_hi)
             elif p_begin <= min(old_prange_1, old_prange_2): #line begins below
@@ -604,18 +596,7 @@ class Market :
                     tup_hi = [new[0],old_prange_2]#everything above the line
                     #print "tup : {}, tup_lo : {}, tup_hi : {}  new : {}".format(tup, tup_lo, tup_hi, new)
                     tup_hi = self.update_quantity(tup, tup_hi, None, 4) #Include Quantity
-                    writeable.append(tup_lo)
-                    writeable.append(tup_hi)
-                #This section shouldn't be needed. Lines below a section are already filtered
-                # elif p_end < old_prange_1: #If the line ends below the segment currently worked on
-                #     print "The line ended below tup: line: {} ------- tup:  {}".format(new, tup)
-                #     total_qrange = [q_min, q_max]
-                #     q_shift = q_max - q_min
-                #     total_prange = [p_begin, p_end]
-                #     total_ranges = [total_prange, total_qrange]
-                #     print "New is : {} ".format(new)
-                #     print "THIS IS THE TOTAL RANGE {} ".format(total_ranges)
-                #     writeable.append( tup )
+                    writeable.extend((tup_lo, tup_hi))
                 else: #ends above
                     #print "{}begins below, ends above{}".format("-"*15, "-"*15)
                     #print "tup is : {}".format(tup)
@@ -634,24 +615,12 @@ class Market :
         #If the line was beyond the bounds of writeable, Add the extra_Q and append it to the end
         #print "Writeable after the loop is: {}".format(writeable)
         if flag is True:
-            if new[2] >= 0: #If the max price of the line is bigger than the max price in the array
-                #print "{}This was a sell, appending the final_tup".format(" { "*10)
-                #print "Writeable is : {}".format(writeable)
-                #print "{}Adding the final_tup{}".format("-"*15, "-"*15) #Add a new segment to include that line in the entire thing.
-                final_tup = [p_begin, p_end]
-                old_tup = [ [writeable[-1][0][1], p_end], [0, 0] ]
-                final_tup = self.update_quantity(old_tup, final_tup, new,2)
-                # added_range = final_tup[1][1] - final_tup[1][0]
-            elif new[2] < 0:
-                #print "{}This was a buy, appending the final_tup".format(" { "*10)
-                #print "Writeable is : {}".format(writeable)
-                #print "{}Adding the final_tup{}".format("-"*15, "-"*15) #Add a new segment to include that line in the entire thing.
-                final_tup = [p_begin, p_end]
-                old_tup = [ [writeable[-1][0][1], p_end], [0, 0] ]
-                final_tup = self.update_quantity(old_tup, final_tup, new, 2)
-                # added_range = final_tup[1][1] - final_tup[1][0]
-                #print "FINAL TUP: {}".format(final_tup)
-                #print "Writeable: {}".format(writeable)
+            #print "{}This was a sell, appending the final_tup".format(" { "*10)
+            #print "Writeable is : {}".format(writeable)
+            #print "{}Adding the final_tup{}".format("-"*15, "-"*15) #Add a new segment to include that line in the entire thing.
+            final_tup = [p_begin, p_end]
+            old_tup = [ [writeable[-1][0][1], p_end], [0, 0] ]
+            final_tup = self.update_quantity(old_tup, final_tup, new,2)
             writeable.append(final_tup)
         return writeable
 
@@ -688,13 +657,6 @@ class Market :
 
         return current
 
-        #elif q_fixed is True:
-        """
-        how to represent infinite price at a given quant when the line keeps going on with higher quantities?
-        """
-        #print "Update fixed was called and finished with {}".format(current)
-        return updated
-
     def find_pfinal(self,bid):
         """
         Find The price of the bid at a given quantity
@@ -706,11 +668,7 @@ class Market :
         #print"{} find_pfinal called {}".format("-"*15, "-"*15)
         #print "The bid is: {}".format(bid)
 
-        if len(bid) < 3 or len(bid) > 3:
-            #print "{} A bid formatted wrong {}".format("@"*15, "@"*15)
-            response = 0
-        else:
-            response = bid[2]
+        response = 0 if len(bid) < 3 or len(bid) > 3 else bid[2]
         price = bid[0]
         quantity = bid[1]
         #print "CURRENT RESPONSE IS {}".format(response)

@@ -36,7 +36,7 @@ end = pd.Timestamp(2016,1,10,23,55) # First Sunday in the year
 start_backup = pd.Timestamp(2016,1,1) # Used for HVAC parameter estimation if HVAC has not been operating during the week of interest
 end_backup = pd.Timestamp(2017,1,1)
 
-folder = run + '/' + run + '_' + "{:04d}".format(ind_base) # + '_5min'
+folder = f'{run}/{run}_' + "{:04d}".format(ind_base)
 results_folder = run
 
 #####################
@@ -80,25 +80,22 @@ def estimate_houseparameters(house, df_house_year, start, end, df_estimates):
 	reg = linear_model.LinearRegression(fit_intercept=False)
 	if (P_heat > 0.0) and (P_cool > 0.0):
 		reg.fit(df_house[['DeltaT_t','HEAT_P','COOL_P']], df_house['DeltaT_t+1'])
-		beta = reg.coef_[0]
 		gamma_heat = reg.coef_[1]
 		gamma_cool = reg.coef_[2]
 	elif (P_heat == 0.0) and (P_cool > 0.0):
 		reg.fit(df_house[['DeltaT_t','COOL_P']], df_house['DeltaT_t+1'])
-		beta = reg.coef_[0]
 		gamma_heat = 0.0
 		gamma_cool = reg.coef_[1]
 	elif (P_heat > 0.0) and (P_cool == 0.0):
 		reg.fit(df_house[['DeltaT_t','HEAT_P']], df_house['DeltaT_t+1'])
-		beta = reg.coef_[0]
 		gamma_heat = reg.coef_[1]
 		gamma_cool = 0.0
 	else:
 		reg.fit(df_house[['DeltaT_t']], df_house['DeltaT_t+1'])
-		beta = reg.coef_[0]
 		gamma_heat = 0.0
 		gamma_cool = 0.0
 
+	beta = reg.coef_[0]
 	if gamma_heat < 0.0:
 		import pdb; pdb.set_trace()
 
@@ -174,7 +171,7 @@ def get_retailrate(start,end):
 
 
 def plot_error(df_house_OFF,name):
-	fig = ppt.figure(figsize=(4,4),dpi=150)   
+	fig = ppt.figure(figsize=(4,4),dpi=150)
 	ax = fig.add_subplot(111)
 	lns1 = ax.scatter(df_house_OFF['T_t+1'],df_house_OFF['T_t+1_est'],c='0.5',marker='x',rasterized=True)
 	#lns3 = ax.scatter(df_house_OFF['T_t+1'],df_house_OFF['T_t'],c='r')
@@ -191,8 +188,7 @@ def plot_error(df_house_OFF,name):
 	#import pdb; pdb.set_trace()
 	SS_tot = ((df_house_OFF['T_t+1'] - df_house_OFF['T_t+1'].mean()).pow(2)).sum()
 	SS_res = ((df_house_OFF['T_t+1'] - df_house_OFF['T_t+1_est']).pow(2)).sum()
-	R2 = 1. - SS_res/SS_tot
-	return R2
+	return 1. - SS_res/SS_tot
 
 
 ################
@@ -252,32 +248,28 @@ df_T_out_year.append(pd.DataFrame(index=[df_T_out_year.index[-1] + pd.Timedelta(
 
 df_settings_week = pd.DataFrame(index=df_hvac_load_year.columns,columns=['heating_system','heating_setpoint','cooling_system','cooling_setpoint','beta','gamma_cool','P_cool','gamma_heat','P_heat','R2'])
 
-glm_in = open('IEEE_123_homes_1min.glm',"r")
-i = 0
-for line in glm_in:
-	if 'cooling_system_type' in line:
-		system = line.split(' ')[-1].split(';')[0]
-		house_ind = df_settings_week.index[i]
-		df_settings_week['cooling_system'].loc[house_ind] = system
-	elif 'heating_system_type' in line:
-		system = line.split(' ')[-1].split(';')[0]
-		house_ind = df_settings_week.index[i]
-		df_settings_week['heating_system'].loc[house_ind] = system
-		i += 1
-glm_in.close()
-
-glm_in = open('IEEE_123_homes_1min.glm',"r")
-for line in glm_in:
-	if '\tname GLD_' in line:
-		house = line.split(' ')[1].split(';')[0]
-	elif '\tcooling_setpoint ' in line:
-		cooling = float(line.split(' ')[1].split(';')[0])
-		df_settings_week['cooling_setpoint'].loc[house] = cooling
-	elif '\theating_setpoint ' in line:
-		heating = float(line.split(' ')[1].split(';')[0])
-		df_settings_week['heating_setpoint'].loc[house] = heating		
-glm_in.close()
-
+with open('IEEE_123_homes_1min.glm',"r") as glm_in:
+	i = 0
+	for line in glm_in:
+		if 'cooling_system_type' in line:
+			system = line.split(' ')[-1].split(';')[0]
+			house_ind = df_settings_week.index[i]
+			df_settings_week['cooling_system'].loc[house_ind] = system
+		elif 'heating_system_type' in line:
+			system = line.split(' ')[-1].split(';')[0]
+			house_ind = df_settings_week.index[i]
+			df_settings_week['heating_system'].loc[house_ind] = system
+			i += 1
+with open('IEEE_123_homes_1min.glm',"r") as glm_in:
+	for line in glm_in:
+		if '\tname GLD_' in line:
+			house = line.split(' ')[1].split(';')[0]
+		elif '\tcooling_setpoint ' in line:
+			cooling = float(line.split(' ')[1].split(';')[0])
+			df_settings_week['cooling_setpoint'].loc[house] = cooling
+		elif '\theating_setpoint ' in line:
+			heating = float(line.split(' ')[1].split(';')[0])
+			df_settings_week['heating_setpoint'].loc[house] = heating
 df_settings_year = df_settings_week.copy() # for missing values
 
 #start = pd.Timestamp(2016,8,1)
@@ -361,7 +353,7 @@ while True:
 			#df_settings_ext['alpha'].loc[ind] = retail_kWh*(1.-df_settings_ext['beta'].loc[ind])/(df_settings_ext['cooling_setpoint'].loc[ind] - df_settings_ext['heating_setpoint'].loc[ind])*1./(2*df_settings_ext['gamma_cool'].loc[ind])
 			df_settings_ext['comf_temperature'].loc[ind] = comf_temp_share*df_settings_ext['cooling_setpoint'].loc[ind] + (1. - comf_temp_share)*df_settings_ext['heating_setpoint'].loc[ind]
 			df_settings_ext['alpha'].loc[ind] = retail_kWh*(1.-df_settings_ext['beta'].loc[ind])/(df_settings_ext['cooling_setpoint'].loc[ind] - df_settings_ext['comf_temperature'].loc[ind])*1./(2*df_settings_ext['gamma_cool'].loc[ind])
-		
+
 	#import pdb; pdb.set_trace()
 	df_settings_ext.to_csv(results_folder +'/HVAC_settings/HVAC_settings_' +str(start).split(' ')[0]+'_'+str(end).split(' ')[0]+'_'+str(ind_base)+'_OLS2.csv')
 	#import pdb; pdb.set_trace()

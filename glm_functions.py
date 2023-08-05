@@ -52,7 +52,7 @@ def write_calibrationfile():
     root = '/docker_powernet'
     out_dir = 'glm_generation_' + city
     os.chdir(out_dir)
-    out_dir = root+'/'+out_dir
+    out_dir = f'{root}/' + out_dir
 
     #Total number of houses to generate
     tot_num_houses=2000
@@ -62,19 +62,13 @@ def write_calibrationfile():
     #Lily'probs
     #prob_houses=[0.65196,0.23572,0.074451,0.02692,0.0085,0.00291]
     prob_houses=[m/sum(prob_houses_or) for m in prob_houses_or]
-    
+
     #Avilable players
     player_list_tmp = os.listdir(player_dir)
-    player_list = []
-    for p in player_list_tmp:
-        if 'player' in p:
-            player_list += [p]
-    home_count = 0
-    tot_zip_dict_sim = dict()
-    for player in player_list:
+    player_list = [p for p in player_list_tmp if 'player' in p]
+    tot_zip_dict_sim = {}
+    for home_count, player in enumerate(player_list):
         tot_zip_dict_sim[home_count] = 'glm_generation_'+city+'/' + player_dir+'/'+player #to write into glm file as absolute path
-        home_count += 1
-
     house_dict,player,outputs=gen_home_inputs(out_dir,tot_num_houses,prob_houses,clim_zone,
                                                          tot_zip_dict_sim)
     glm_dict_add,obj_type,globals_list,include_list,sync_list=gen_calibration_glm(out_dir,
@@ -86,57 +80,52 @@ def write_calibrationfile():
 
 def change_glmfile(s_settings):
     original_feeder = 'IEEE123_BP_2bus_1min_ORIGINAL.glm'
-    old_glm = open(original_feeder,'r')
-    new_glm = open('IEEE123_BP_2bus_1min.glm','w') 
+    with open(original_feeder,'r') as old_glm:
+        new_glm = open('IEEE123_BP_2bus_1min.glm','w') 
 
-    # Re-write
-    for line in old_glm:
-        # Change date
-        if 'starttime' in line:
-            new_glm.write('\tstarttime "'+start_time_str+'";\n')
-        elif 'stoptime' in line:
-            new_glm.write('\tstoptime "'+end_time_str+'";\n')
-        # Change result folder in feeder glm
-        elif 'file ' in line:
-            #import pdb; pdb.set_trace()
-            indent = line.split('file')[0]
-            file_name = line.rsplit('/',1)[-1]
-            new_glm.write(indent+'file '+results_folder+'/'+file_name)
-        else:
-            new_glm.write(line)
+        # Re-write
+        for line in old_glm:
+            # Change date
+            if 'starttime' in line:
+                new_glm.write('\tstarttime "'+start_time_str+'";\n')
+            elif 'stoptime' in line:
+                new_glm.write('\tstoptime "'+end_time_str+'";\n')
+            # Change result folder in feeder glm
+            elif 'file ' in line:
+                #import pdb; pdb.set_trace()
+                indent = line.split('file')[0]
+                file_name = line.rsplit('/',1)[-1]
+                new_glm.write(indent+'file '+results_folder+'/'+file_name)
+            else:
+                new_glm.write(line)
 
-    old_glm.close()
     new_glm.close()
 
     original_homes = 'IEEE_123_homes_1min_ORIGINAL.glm'
-    old_glm = open(original_homes,'r')
-    new_glm = open('IEEE_123_homes_1min.glm','w') 
+    with open(original_homes,'r') as old_glm:
+        new_glm = open('IEEE_123_homes_1min.glm','w') 
 
-    # Re-write
-    j = 0
-    for line in old_glm:
-        # Change result folder in feeder glm
-        if ('file ' in line) and ('player' in line):
-            #import pdb; pdb.set_trace()
-            indent = line.split('file')[0]
-            file_name = line.rsplit('/',1)[-1]
-            glm_folder = 'glm_generation_'+city+'/players_' + city
-            new_glm.write(indent+'file '+glm_folder+'/'+file_name)
-        elif ('file ' in line) and ('.csv' in line):
-            #import pdb; pdb.set_trace()
-            indent = line.split('file')[0]
-            file_name = line.rsplit('/',1)[-1]
-            new_glm.write(indent+'file '+results_folder+'/'+file_name)
-        # Flexible houses
-        elif 'heating_system_type' in line and j < (flexible_houses):
-            new_glm.write(line+'\tthermostat_control NONE;\n')
-            j += 1
-        elif 'thermostat_control NONE;' in line:
-            pass
-        else:
-            new_glm.write(line)
-   
-    old_glm.close()
+        # Re-write
+        j = 0
+        for line in old_glm:
+                    # Change result folder in feeder glm
+            if ('file ' in line) and ('player' in line):
+                #import pdb; pdb.set_trace()
+                indent = line.split('file')[0]
+                file_name = line.rsplit('/',1)[-1]
+                glm_folder = 'glm_generation_'+city+'/players_' + city
+                new_glm.write(indent+'file '+glm_folder+'/'+file_name)
+            elif ('file ' in line) and ('.csv' in line):
+                #import pdb; pdb.set_trace()
+                indent = line.split('file')[0]
+                file_name = line.rsplit('/',1)[-1]
+                new_glm.write(indent+'file '+results_folder+'/'+file_name)
+            elif 'heating_system_type' in line and j < (flexible_houses):
+                new_glm.write(line+'\tthermostat_control NONE;\n')
+                j += 1
+            elif 'thermostat_control NONE;' not in line:
+                new_glm.write(line)
+
     new_glm.close()
 
     # Include HVAC settings?
@@ -152,7 +141,7 @@ def rewrite_glmfile(rewrite_houses=True,run_file=True,mode=None):
     root = '/docker_powernet'
     out_dir = 'glm_generation_' + city
     os.chdir(out_dir)
-    out_dir = root+'/'+out_dir
+    out_dir = f'{root}/' + out_dir
 
     #Take Base_123_full.glm and create IEEE123_BP_2bus_1min.glm and IEEE_123_homes_1min.glm
     gen_glm(out_dir,start_time_str,end_time_str,PV_share,Batt_share,EV_share,1,False,rewrite_houses,run_file)
@@ -168,7 +157,7 @@ def rewrite_glmfile(rewrite_houses=True,run_file=True,mode=None):
     #import right gld module
     os.chdir(root)
     print(os.getcwd())
-    
+
     #Modifies glm file with relevant gridlabd_functions module and copies to base
     modify_gldfcts(out_dir,mode)
 
@@ -178,17 +167,16 @@ def add_flexHVAC():
     file = 'IEEE_123_homes_1min_nothermostatcontrol.glm'
     new_file = 'IEEE_123_homes_1min.glm'
 
-    glm = open(file,'r') 
-    new_glm = open(new_file,'w') 
-    j = 0
-    # Flexible houses
-    for line in glm:
-        if 'heating_system_type' in line and j < (flexible_houses):
-            new_glm.write(line+'\tthermostat_control NONE;\n')
-            j += 1
-        else:
-            new_glm.write(line)
-    glm.close()
+    with open(file,'r') as glm:
+        new_glm = open(new_file,'w')
+        j = 0
+        # Flexible houses
+        for line in glm:
+            if 'heating_system_type' in line and j < (flexible_houses):
+                new_glm.write(line+'\tthermostat_control NONE;\n')
+                j += 1
+            else:
+                new_glm.write(line)
     new_glm.close()
     return
 
@@ -197,21 +185,20 @@ def modify_gldfcts(out_dir,mode):
     file = out_dir+'/IEEE123_BP_2bus_1min.glm'
     new_file = 'IEEE123_BP_2bus_1min.glm'
 
-    glm = open(file,'r') 
-    new_glm = open(new_file,'w') 
-    
-    for line in glm:
-        if 'module gridlabd_functions;' in line:
-            if mode == 'noDER_nomarket':
-                pass
-            elif mode == 'DER_nomarket':
-                new_glm.write('module gridlabd_functions_DER_nomarket;\n')
+    with open(file,'r') as glm:
+        new_glm = open(new_file,'w') 
+
+        for line in glm:
+            if 'module gridlabd_functions;' in line:
+                if mode == 'noDER_nomarket':
+                    pass
+                elif mode == 'DER_nomarket':
+                    new_glm.write('module gridlabd_functions_DER_nomarket;\n')
+                else:
+                    print(f'No such mode: {str(mode)}')
+                    new_glm.write(line)
             else:
-                print('No such mode: '+str(mode))
                 new_glm.write(line)
-        else:
-            new_glm.write(line)
-    glm.close()
     new_glm.close()
     return
 
@@ -220,21 +207,20 @@ def modify_k(out_dir):
     file = out_dir+'/IEEE_123_homes_1min.glm'
     new_file = 'IEEE_123_homes_1min.glm'
 
-    glm = open(file,'r') 
-    new_glm = open(new_file,'w') 
-    
-    for line in glm:
-        if 'cooling_setpoint' in line:
-            new_glm.write('\tcooling_setpoint 73;\n')
-        elif 'heating_setpoint' in line:
-            new_glm.write('\theating_setpoint 69;\n')
-        elif '\tk ' in line:
-            #import pdb; pdb.set_trace()
-            k = np.random.choice(range(101))*4
-            new_glm.write('\tk '+str(k)+';\n')
-        else:
-            new_glm.write(line)
-    glm.close()
+    with open(file,'r') as glm:
+        new_glm = open(new_file,'w') 
+
+        for line in glm:
+            if 'cooling_setpoint' in line:
+                new_glm.write('\tcooling_setpoint 73;\n')
+            elif 'heating_setpoint' in line:
+                new_glm.write('\theating_setpoint 69;\n')
+            elif '\tk ' in line:
+                #import pdb; pdb.set_trace()
+                k = np.random.choice(range(101))*4
+                new_glm.write('\tk '+str(k)+';\n')
+            else:
+                new_glm.write(line)
     new_glm.close()
     return
 
@@ -242,7 +228,7 @@ def gen_glm(out_dir,start_time_str,end_time_str,PV_penetration,bat_penetration,E
     ##### NETWORK: Load modified GLM file for fully populated case
     base_glm_file='Base_123_full.glm'
     glm_dict_base,obj_type_base,globals_list_base,include_list_base=load_base_glm(out_dir,base_glm_file)
-    
+
     sync_list_base=[]
     glm_dict_base[0]['starttime'] = '"'+start_time_str+'"'
     glm_dict_base[0]['stoptime'] = '"'+end_time_str+'"'
@@ -250,35 +236,28 @@ def gen_glm(out_dir,start_time_str,end_time_str,PV_penetration,bat_penetration,E
     network_target_file_name='IEEE123_BP_2bus_1min.glm'
     write_base_glm(glm_dict_base,obj_type_base,globals_list_base,include_list_base,out_dir,network_target_file_name,sync_list_base)
     print('Loaded network')
-    
+
+    home_count = 0
+    tot_zip_dict_sim = {}
     #### PLAYERS: Generate player files in csv format
     #Just get and list existing players, no new player generation
     if not regen_players:
         player_list_tmp = os.listdir(player_dir)
-        player_list = []
-        for p in player_list_tmp:
-            if 'player' in p:
-                player_list += [p]
-        home_count = 0
-        tot_zip_dict_sim = dict()
+        player_list = [p for p in player_list_tmp if 'player' in p]
         for player in player_list:
             tot_zip_dict_sim[home_count] = 'glm_generation_'+city+'/' + player_dir+'/'+player #to write into glm file as absolute path
             home_count += 1
-    #Recreate players from Pecan Street data
     else:
         sys.exit('For integrated code, player regeneration based on Pecan Street data has not been tested yet.')
         data_dir=out_dir+'/Pecan_st_data_' + city
         inc_ind_zip='False'
         year_vec=np.array([year])
-        tot_zip_dict_sim={}
-        home_count=0
-	    
         for year in year_vec:
             os.chdir(data_dir)
-            filename_list=glob.glob('*_'+str(year)+'.csv') #'d_*_
+            filename_list = glob.glob(f'*_{str(year)}.csv')
             start=str(year)+start_time_str[4:]
             end=str(year)+end_time_str[4:]
-	        
+
             for file_name in filename_list:
                 print(file_name)
                 if regen_players == True:
@@ -287,13 +266,13 @@ def gen_glm(out_dir,start_time_str,end_time_str,PV_penetration,bat_penetration,E
                     match = re.search('(.+?)_(.+?).csv', file_name) #'d_(.+?)_(.+?).csv'
                     house_num=match[1]
                     year=int(match[2])
-                    out_file_name="ps_"+str(house_num)+'_'+str(year)+".player"
+                    out_file_name = f"ps_{str(house_num)}_{year}.player"
                     temp_zip_dict=player_dir+'/'+out_file_name #is that correct??list?
                 if len(temp_zip_dict)!=0:
                     tot_zip_dict_sim[home_count]=temp_zip_dict
                     home_count=home_count+1
         print('Generated players')
-    
+
     ######## HOUSES
     #Just populate house_dict based on original glm and use existing technical specifications
     if not rewrite_houses:
@@ -317,14 +296,14 @@ def gen_glm(out_dir,start_time_str,end_time_str,PV_penetration,bat_penetration,E
         #sys.exit('Substitute ADMD')
         mean_day_energy = np.genfromtxt('mean_day_energy.csv')
         mean_day_energy = mean_day_energy.reshape(mean_day_energy.shape[0],1)
-        
+
         #PV calibration   
         data_dir='PV_calibration_july'
         PV_day_power,PV_area_ref,PV_day_mean=PV_calibration(data_dir)
-        
+
         # % Get PV array sizes 
         PV_area,bat_size=PV_battery_sizing(mean_day_energy,PV_day_mean,PV_area_ref,outputs)        
-    
+
     #Randomly draw house characteristics and generate house_dict anew
     #Only to create Basefile!
     else:
@@ -338,14 +317,14 @@ def gen_glm(out_dir,start_time_str,end_time_str,PV_penetration,bat_penetration,E
         #mean_day_energy = np.array(pandas.read_csv('mean_day_energy.csv',header=-1))
         mean_day_energy = np.genfromtxt('mean_day_energy.csv')
         mean_day_energy = mean_day_energy.reshape(mean_day_energy.shape[0],1)
-        
+
         #PV calibration   
         data_dir='PV_calibration_july'
         PV_day_power,PV_area_ref,PV_day_mean=PV_calibration(data_dir)
-        
+
         # % Get PV array sizes 
         PV_area,bat_size=PV_battery_sizing(mean_day_energy,PV_day_mean,PV_area_ref,outputs)
-        
+
         # % House placement in network     
         home_bus_list=[]
 
@@ -354,7 +333,7 @@ def gen_glm(out_dir,start_time_str,end_time_str,PV_penetration,bat_penetration,E
                                         outputs,home_bus_list,0,rewrite_houses)
     os.chdir(out_dir)
     print('Generated home data')
-    
+
     ######## Generation of flexible appliances
 
     # % PV placement in network 
@@ -365,7 +344,7 @@ def gen_glm(out_dir,start_time_str,end_time_str,PV_penetration,bat_penetration,E
         print(os.getcwd())
         df_PV_placement = pandas.read_csv('Base_PV_placement.csv')  #Copies from base file (100% PV)
         df_PV_placement.iloc[:num_PV].to_csv('PV_placement.csv')
-    
+
     # %Battery placement in network 
     num_bat=round(num_placed_homes*bat_penetration)
     if rewrite_houses:
@@ -375,7 +354,7 @@ def gen_glm(out_dir,start_time_str,end_time_str,PV_penetration,bat_penetration,E
         #df_bat_placement = pandas.read_csv('Base_PV_placement.csv')  #Copies from base file (100% Batteries)
         #df_bat_placement.rename(columns={'PV_node_num':'Bat_node_num','PV_house_index':'Bat_house_index'},inplace=True)
         df_bat_placement.iloc[:num_bat].to_csv('Bat_placement.csv')
-    
+
     # %EV placement in network 
     num_EV=round(num_placed_homes*EV_penetration)
     if rewrite_houses:
@@ -385,24 +364,24 @@ def gen_glm(out_dir,start_time_str,end_time_str,PV_penetration,bat_penetration,E
         #df_EV_placement = pandas.read_csv('Base_PV_placement.csv')  #Copies from base file (100% Batteries)
         #df_EV_placement.rename(columns={'PV_node_num':'EV_node_num','PV_house_index':'EV_house_index'},inplace=True)
         df_EV_placement.iloc[:num_EV].to_csv('EV_placement.csv')
-    
+
     print('Populated network')
-    
+
     ##### Generate GLM file for populated IEEE 123 feeder 
     PV = str(int(PV_penetration*100))
     Batt = str(int(bat_penetration*100))
     EVs = str(int(EV_penetration*100))
-    net_sym_params={#'num_houses':'100',
-                'out_file':"IEEE_123_homes_"+str(player_interval)+"min_nothermostatcontrol.glm",
-                'inc_ZIP_player':'True',                   #True = add ZIP load object for each house
-                'inc_battery':'True',                      #True = put battery in simulation
-                'inc_PV':'True',                            #True = put PV in simulation
-                'inc_EV':'True',                            #True = put PV in simulation
-                'imp_EU':'False',                           #True = include implicit enduses 
-                'start_time':" '"+start_time_str+"'",  #simulation start time
-                'end_time':" '"+end_time_str+"'"    #simulation end time
-                }
-    
+    net_sym_params = {
+        'out_file': f"IEEE_123_homes_{str(player_interval)}min_nothermostatcontrol.glm",
+        'inc_ZIP_player': 'True',
+        'inc_battery': 'True',
+        'inc_PV': 'True',
+        'inc_EV': 'True',
+        'imp_EU': 'False',
+        'start_time': " '" + start_time_str + "'",
+        'end_time': " '" + end_time_str + "'",
+    }
+
     print('Start generating network')
     glm_dict_add,obj_type,globals_list,include_list,sync_list=gen_network_glm(out_dir,
             net_sym_params,house_dict,player,outputs,tot_zip_dict_sim,home_bus_list_aug,PV_area,bat_size,0,rewrite_houses,run_file)
@@ -413,35 +392,32 @@ def gen_glm(out_dir,start_time_str,end_time_str,PV_penetration,bat_penetration,E
 def load_base_glm(base_file_dir,base_glm_file):
     f = open(base_glm_file, 'r')
     glm=f.readlines()
-    
+
     glm_dict={}
     obj_type={}
-    glm_list=list()
-    globals_list=list()
-    include_list=list()
-    
+    glm_list = []
+    globals_list = []
+    include_list = []
+
     #edit out all comments
     for l in glm:
-        line_temp=l.lstrip().rstrip().rstrip('\n').split('//')[0]   
+        line_temp=l.lstrip().rstrip().rstrip('\n').split('//')[0]
         #Comment somewhere in line
         if len(line_temp)>1:
             #There is some content in line, extract content
             if l.split('//')[0]!='':
                 glm_list.append(line_temp.rstrip())
-        #No comment in line
-        else:
-            #Line is not a space
-            if line_temp!='':
-                glm_list.append(line_temp)
-                
+        elif line_temp!='':
+            glm_list.append(line_temp)
+
     obj_num=0
     obj_flag=0
     #put info into dict structure
     for l in glm_list:
         #Setting global variable
-        if l[0:4]=='#set':
+        if l[:4] == '#set':
             globals_list.append(l)
-        elif l[0:8]=='#include':
+        elif l[:8] == '#include':
             include_list.append(l)
         elif 'object' in l:
             obj_flag=1
@@ -463,19 +439,18 @@ def load_base_glm(base_file_dir,base_glm_file):
             obj_flag=1
             obj_type[obj_num]={'clock':'clock'}
             prop_num=0
-        elif l=='}' or l=='};':
+        elif l in ['}', '};']:
             obj_num=obj_num+1
             obj_flag=0
-        else:
-            if obj_flag==1:
-                line_temp=l.split(' ',maxsplit=1)
-                if prop_num==0:
-                    glm_dict[obj_num]={line_temp[0]:line_temp[1].rstrip(';')}
-                    prop_num=prop_num+1
-                else:
-                    glm_dict[obj_num][line_temp[0]]=line_temp[1].rstrip(';')
+        elif obj_flag==1:
+            line_temp=l.split(' ',maxsplit=1)
+            if prop_num==0:
+                glm_dict[obj_num]={line_temp[0]:line_temp[1].rstrip(';')}
+                prop_num=prop_num+1
             else:
-                print('error')
+                glm_dict[obj_num][line_temp[0]]=line_temp[1].rstrip(';')
+        else:
+            print('error')
     return glm_dict,obj_type,globals_list,include_list
 
 def write_base_glm(glm_dict,obj_type,globals_list,include_list,out_dir,file_name,sync_list,calibration=False):  

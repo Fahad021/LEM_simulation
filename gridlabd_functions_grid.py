@@ -25,9 +25,7 @@ def on_precommit(t):
 	dt_sim_time = parser.parse(gridlabd.get_global('clock')).replace(tzinfo=None)
 
 	#Run market only every interval
-	if not (dt_sim_time.second%interval == 0):
-		return t
-	else: 
+	if dt_sim_time.second%interval == 0:
 		print(dt_sim_time)
 
 		#########################
@@ -45,7 +43,7 @@ def on_precommit(t):
 
 		# For last house (as an exmaple)
 		house = houses[0]
-		print('Properties of '+house)
+		print(f'Properties of {house}')
 		house_obj = gridlabd.get_object(house)
 		print(house_obj)
 		print()
@@ -53,7 +51,7 @@ def on_precommit(t):
 		# Get characteristics of a node
 		node = gridlabd.get_object(house_obj['parent'])['parent']
 		node_obj = gridlabd.get_object(node)
-		print('Properties of '+node)
+		print(f'Properties of {node}')
 		print(node_obj)
 		print()
 
@@ -79,12 +77,13 @@ def on_precommit(t):
 				bid = (heat_q,retail_rate*(1+k*(heating_setpoint - T_air)/heating_setpoint),node) # very simple bidding fct
 			else:
 				bid = (heat_q,retail_rate*(1+k*(T_air - cooling_setpoint)/cooling_setpoint),node) # very simple bidding fct
-		
+
 			# TODO : submit bid
 
 		# TODO : clear market
 
 		# TODO : re-distribute price(s) to devices
 
-		import pdb; pdb.set_trace()
-		return t
+		import pdb
+		pdb.set_trace()
+	return t

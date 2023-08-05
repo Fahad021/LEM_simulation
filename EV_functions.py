@@ -111,8 +111,10 @@ def get_settings_EVs(EVlist,interval,mysql=False):
 #If no EV data is available, random generation of arrival and departure events as well as SOC_t
 def get_settings_EVs_rnd(EVlist,interval,mysql=False):
       cols_EV = ['EV_name','house_name','SOC_max','i_max','v_max','u_max','efficiency','charging_type','k','soc_t','SOC_t','connected','next_event','active_t-1','active_t']
-      df_EV = pandas.DataFrame(columns=cols_EV)   
+      df_EV = pandas.DataFrame(columns=cols_EV)
       start_time = dt_sim_time = parser.parse(gridlabd.get_global('clock')).replace(tzinfo=None)
+      connected = 1
+
       for EV in EVlist:
             house_name = 'GLD_'+EV[3:]
             EV_obj = gridlabd.get_object(EV)
@@ -131,10 +133,8 @@ def get_settings_EVs_rnd(EVlist,interval,mysql=False):
             soc_t = soc_t + (1. - soc_t)/2. #No EV connected yet - at midnight, initialize with 50% charged already
             gridlabd.set_value(EV,'state_of_charge',str(soc_t))
             SOC_t = soc_t*SOC_max
-            connected = 1
-
             #Set EV
-            gridlabd.set_value(EV,'generator_status','ONLINE')  
+            gridlabd.set_value(EV,'generator_status','ONLINE')
             #gridlabd.set_value(EV,'state_of_charge',str(next_soc))
             #gridlabd.set_value(EV,'battery_capacity',str(next_socmax*1000))
             #i_max = 1000*next_u/df_EV_state['v_max'].loc[EV]
@@ -176,11 +176,11 @@ def update_EV(dt_sim_time,df_EV_state):
                         EV_type = np.random.choice(len(list_EVs),1)[0]
                         next_u, next_socmax = list_EVs[EV_type]
                         next_soc = max(next_socmax - energy_refuel,0.0)/next_socmax
-                  
+
                   #next_event, next_soc = df_events[[EV,EV+'_SOC']].iloc[0]
                   if not np.isnan(next_soc):
                         #Set EV
-                        gridlabd.set_value(EV,'generator_status','ONLINE')  
+                        gridlabd.set_value(EV,'generator_status','ONLINE')
                         gridlabd.set_value(EV,'state_of_charge',str(next_soc))
                         gridlabd.set_value(EV,'battery_capacity',str(next_socmax*1000))
                         i_max = 1000*next_u/df_EV_state['v_max'].loc[EV]
@@ -191,7 +191,7 @@ def update_EV(dt_sim_time,df_EV_state):
 
                         gridlabd.set_value(EV_inv,'rated_power',str(1.2*next_u*1000))
                         gridlabd.set_value(EV_inv,'rated_battery_power',str(1.2*next_u*1000))
-                         
+
                         #Set df_EV_state   
                         df_EV_state.at[EV,'SOC_max'] = next_socmax
                         df_EV_state.at[EV,'i_max'] = i_max
@@ -199,10 +199,9 @@ def update_EV(dt_sim_time,df_EV_state):
                         df_EV_state.at[EV,'connected'] = 1 #Does this one not work such that delay in connection?
                         df_EV_state.at[EV,'soc_t'] = next_soc
                         df_EV_state.at[EV,'SOC_t'] = next_soc*next_socmax
-                        df_EV_state.at[EV,'next_event'] = next_event
                   else: #if next event associated with non-NaN SOC - now connected and pot. charging
                         #Set EV (only switch off)
-                        gridlabd.set_value(EV,'generator_status','OFFLINE')  
+                        gridlabd.set_value(EV,'generator_status','OFFLINE')
                         gridlabd.set_value(EV,'state_of_charge',str(0.0))
                         #Set df_EV_state   
                         df_EV_state.at[EV,'SOC_max'] = 0.0
@@ -211,8 +210,7 @@ def update_EV(dt_sim_time,df_EV_state):
                         df_EV_state.at[EV,'connected'] = 0 #Does this one not work such that delay in connection?
                         df_EV_state.at[EV,'soc_t'] = 0.0
                         df_EV_state.at[EV,'SOC_t'] = 0.0
-                        df_EV_state.at[EV,'next_event'] = next_event
-            #After last event (no upcoming events)
+                  df_EV_state.at[EV,'next_event'] = next_event
             elif pandas.isnull(next_event):
                   #Set EV (only switch off)
                   gridlabd.set_value(EV,'generator_status','OFFLINE')  
@@ -224,7 +222,6 @@ def update_EV(dt_sim_time,df_EV_state):
                   df_EV_state.at[EV,'soc_t'] = 0.0
                   df_EV_state.at[EV,'SOC_t'] = 0.0
                   df_EV_state.at[EV,'next_event'] = next_event
-            #During charging event: Update EV state (SOC)
             elif pandas.isnull(next_socmax):
                   # Updating through GridlabD model
                   EV_obj = gridlabd.get_object(EV)
@@ -236,9 +233,6 @@ def update_EV(dt_sim_time,df_EV_state):
                   # Updating using df
                   #print('GLD battery model is not used, manual updating!')
                   #gridlabd.set_value(EV,'state_of_charge',str(df_EV_state['soc_t'].loc[EV])) #in p.u. 
-            else:
-                  pass
-
       df_events.to_csv('EV_events_pop.csv')
       return df_EV_state
 
@@ -261,7 +255,7 @@ def update_EV_rnd(dt_sim_time,df_EV_state):
                         EV_type = np.random.choice(len(list_EVs),1)[0]
                         next_u, next_socmax = list_EVs[EV_type]
                         next_soc = max(next_socmax - energy_refuel,0.0)/next_socmax
-                  
+
                   #just arrived
                   if df_EV_state['connected'].loc[EV] == 0:
                         #Set EV
@@ -279,17 +273,17 @@ def update_EV_rnd(dt_sim_time,df_EV_state):
                         gridlabd.set_value(EV_inv,'rated_power',str(1.2*next_u*1000))
                         gridlabd.set_value(EV_inv,'rated_battery_power',str(1.2*next_u*1000))
                         #import pdb; pdb.set_trace()
-                         
+
                         #Set df_EV_state   
                         df_EV_state.at[EV,'connected'] = 1 #Does this one not work such that delay in connection?
                         df_EV_state.at[EV,'soc_t'] = soc_t
                         df_EV_state.at[EV,'SOC_t'] = soc_t*df_EV_state['SOC_max'].loc[EV]
                         u = (df_EV_state['SOC_max'].loc[EV] - df_EV_state['SOC_t'].loc[EV])*(3600./interval) #hypothetical u for constant charging during interval
                         df_EV_state.at[EV,'u_t'] = min(u,df_EV_state['u_max'].loc[EV])
-                        
+
                         #Departure time tomorrow
                         df_EV_state.at[EV,'next_event'] = today + pandas.Timedelta(days=1,hours=np.random.choice(dep_hours),minutes=np.random.choice(range(60))) #Next event: disconnection
-                  
+
                   else: #if next event associated with non-NaN SOC - now connected and pot. charging
                         #Set EV (only switch off)
                         gridlabd.set_value(EV,'generator_status','OFFLINE')  
@@ -302,8 +296,7 @@ def update_EV_rnd(dt_sim_time,df_EV_state):
 
                         #Arrival time today
                         df_EV_state.at[EV,'next_event'] = today + pandas.Timedelta(hours=np.random.choice(arr_hours),minutes=np.random.choice(range(60))) #Next event: disconnection
-            
-            #During charging event: Update EV state (SOC)
+
             elif df_EV_state['connected'].loc[EV] == 1:
                   # Updating through GridlabD model
                   # EV_obj = gridlabd.get_object(EV)
@@ -315,7 +308,7 @@ def update_EV_rnd(dt_sim_time,df_EV_state):
                   # Updating using df
                   #print('GLD battery model is not used for EVs, manual updating!')
                   gridlabd.set_value(EV,'state_of_charge',str(df_EV_state['soc_t'].loc[EV])) #in p.u. 
-                  
+
                   #Calculate possible charging rate and stop charging if around 0
                   u = (df_EV_state['SOC_max'].loc[EV] - df_EV_state['SOC_t'].loc[EV])*(3600./interval) #hypothetical u for constant charging during interval
                   u_t = min(u,df_EV_state['u_max'].loc[EV])
@@ -324,9 +317,6 @@ def update_EV_rnd(dt_sim_time,df_EV_state):
                   df_EV_state.at[EV,'u_t'] = u_t
                   if u_t == 0.0:
                         gridlabd.set_value('EV_inverter_'+EV[3:],'P_Out',str(0.0))
-            else:
-                  pass
-
       return df_EV_state
 
 #TESS

@@ -12,15 +12,17 @@ def calc_ADMD():
 
     #get timestamp and power data from GridLAB-D output
     power_data_temp = pandas.read_csv('glm_generation_'+city+'/calibration_total_load.csv',header=8,usecols=range(2001)) #in kW
-    time_data=[[] for k in range(len(power_data_temp['# timestamp']))]
+    time_data = [[] for _ in range(len(power_data_temp['# timestamp']))]
     for t in range(len(power_data_temp['# timestamp'])):
         timestamp_sample=str(power_data_temp['# timestamp'][t])
-        time_data[t]=datetime.datetime.strptime(timestamp_sample[0:19],"%Y-%m-%d %H:%M:%S")
+        time_data[t] = datetime.datetime.strptime(
+            timestamp_sample[:19], "%Y-%m-%d %H:%M:%S"
+        )
     power_data=power_data_temp #copy.deepcopy(power_data_temp)
-    
+
     power_data=power_data.drop('# timestamp',axis=1)
     power_data=np.array(power_data)*1000
-    
+
     #import pdb; pdb.set_trace()
 #    #plot individual homes demand    
 #    plt.figure(1,figsize=(8,8))
@@ -41,8 +43,8 @@ def calc_ADMD():
             day_energy[d,h]=sum(power_data[(d*1440):(d*1440+1440),h])/60 #sum every one minute, divide by 60 for kWh
         max_day_energy[h,0]=max(day_energy[:,h])
         mean_day_energy[h,0]=sum(day_energy[:,h])/math.floor((len(power_data_temp)-1)/1440)
-    
-    
+
+
     #calculate aggregate demand and plot
     agg_power=np.sum(power_data, axis=1) #in kW
 

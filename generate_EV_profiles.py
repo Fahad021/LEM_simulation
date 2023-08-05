@@ -13,7 +13,11 @@ import datetime
 #EV names
 df_EV_names = pd.read_csv('~/Documents/powernet/powernet_markets_mysql/glm_generation_Austin/EV_placement.csv',index_col=[0])
 for ind in df_EV_names.index:
-	df_EV_names.at[ind,'name'] = 'EV_B1_N'+str(df_EV_names.EV_node_num[ind])+'_'+str('{:04}'.format(df_EV_names.EV_house_index[ind]))
+	df_EV_names.at[
+		ind, 'name'
+	] = f'EV_B1_N{str(df_EV_names.EV_node_num[ind])}_' + '{:04}'.format(
+		df_EV_names.EV_house_index[ind]
+	)
 print(df_EV_names.iloc[:5])
 
 #Get files in charging profiles which comply with requirements
@@ -21,8 +25,7 @@ subfolders = [f.path for f in os.scandir(os.getcwd()) if f.is_dir() ]
 #subfolders = [subfolders[0]]
 included_profiles = []
 
-f = 0
-for subfolder in subfolders:
+for f, subfolder in enumerate(subfolders):
 	list_files = os.listdir(subfolder) # dir is your directory path
 	included_profiles += [[]]
 	for file in list_files:
@@ -35,11 +38,8 @@ for subfolder in subfolders:
 			pass
 			#print(file)
 			#print(df.columns)
-	f += 1
-
 #Write to dict
-events = dict()
-f = 0
+events = {}
 key = 0
 energy_charged_kWh_max = 0.0
 rate_kW_max = 0.0
@@ -47,7 +47,7 @@ l = 0
 
 df_sessions = pd.DataFrame(columns=['sum_charge','rate_charge'])
 
-for subfolder in subfolders:
+for f, subfolder in enumerate(subfolders):
 	for file in included_profiles[f]:
 		df = pd.read_csv(subfolder +'/' + file,parse_dates=['Interval Start Time (Local)'])
 		prev_session_id = 0
@@ -78,15 +78,14 @@ for subfolder in subfolders:
 				if av_rate_kW > rate_kW_max:
 					rate_kW_max = av_rate_kW
 				av_rate_list += [av_rate_kW]
-			elif session_id == prev_session_id:
+			else:
 				energy_charged_kWh += df['Interval Energy'].loc[ind]
 				interval = pd.Timedelta(str(df['Interval Duration (Secs)'].loc[ind])+' seconds')
 
 				prev_time = df['Interval Start Time (Local)'].loc[ind] + interval
 		key += 1
-	f += 1
-print('Max charge '+str(energy_charged_kWh_max))
-print('Max rate '+str(rate_kW_max))
+print(f'Max charge {str(energy_charged_kWh_max)}')
+print(f'Max rate {str(rate_kW_max)}')
 max_sto_vol = energy_charged_kWh_max/0.8 #Standard battery size
 
 df_sessions.sort_values(by='rate_charge',inplace=True)
@@ -99,9 +98,7 @@ for ind in df_EV_names.index:
 	cols += [df_EV_names['name'].loc[ind], df_EV_names['name'].loc[ind]+'_u', df_EV_names['name'].loc[ind]+'_SOC']
 df_events = pd.DataFrame(index=range(1000),columns = cols)
 
-no_profiles = 0
-for profiles in included_profiles:
-	no_profiles += len(profiles)
+no_profiles = sum(len(profiles) for profiles in included_profiles)
 needed_profiles = len(df_EV_names.index)
 
 #RELATE TO ARBITRARY DATE, eg 07/01/2016
@@ -142,14 +139,14 @@ for EV in df_EV_names['name']:
 					#CLUSTER ACC TO BATTERY TYPES
 					SOC_0 = (max_sto_vol - energy_charged_kWh)/max_sto_vol
 					SOC_0 = np.random.uniform(0.2,1.0)
-					
+
 				if energy_charged_kWh > 0.1: #Skip events with communication mistakes
 					df_events.at[l,EV] = start_time_ref
 					df_events.at[l,EV+'_u'] = av_power
 					df_events.at[l,EV+'_SOC'] = SOC_0
 					df_events.at[l+1,EV] = end_time_ref
 					l += 2
-		
+
 print(df_events.iloc[:10])
 df_events = df_events.dropna(axis=0,how='all')
 df_events.to_csv('EV_events.csv')

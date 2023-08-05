@@ -25,10 +25,10 @@ def get(obj):
 	return
 
 def sort_list(unsorted_list):
-	sorted_list = []
 	if unsorted_list:
 		no = [int(x.split('_')[-1]) for x in unsorted_list]
 		d = dict(zip(no,unsorted_list))
+		sorted_list = []
 		for i in range(1,max(no)+1):
 			try:
 				sorted_list.append(d[i])
@@ -57,16 +57,10 @@ def sort_batteries(batteries):
 	return batterylist, EVlist
 
 def sort_pvs(pvs):
-	pvlist_unsorted = [];
-
-	#Batteries not ordered accoridng to house numbers
-	for pv in pvs:
-		pvlist_unsorted.append(pv)
-
 	#Sort PVs
-	
+
 	pv_list = []
-	if pvlist_unsorted:
+	if pvlist_unsorted := list(pvs):
 		pvlist_no = [int(x.split('_')[-1]) for x in pvlist_unsorted]
 		d = dict(zip(pvlist_no,pvlist_unsorted))
 		for i in range(1,max(pvlist_no)+1):
@@ -78,7 +72,7 @@ def sort_pvs(pvs):
 	pvinv_list = []
 	for pv in pv_list:
 		#inverter_name = gridlabd_functions.get(pv,'parent')
-		inverter_name = 'PV_inverter_' + pv[3:]
+		inverter_name = f'PV_inverter_{pv[3:]}'
 		pvinv_list += [inverter_name]
 
 	return pv_list, pvinv_list
